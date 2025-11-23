@@ -5,7 +5,7 @@ import flixel.FlxSprite;
 import flixel.FlxCamera;
 import flixel.FlxObject;
 import flixel.group.FlxSpriteGroup;
-import flixel.group.FlxTypedGroup;
+import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.math.FlxPoint;
 import flixel.text.FlxText;
 import flixel.util.FlxColor;
@@ -16,7 +16,7 @@ import backend.ClientPrefs;
 import objects.Character;
 import objects.Bar;
 import objects.HealthIcon;
-import states.MusicBeatState;
+import backend.MusicBeatState;
 import states.PlayState;
 import backend.ui.PsychUIBox;
 import backend.ui.PsychUIInputText;
@@ -26,6 +26,14 @@ import backend.ui.PsychUINumericStepper;
 import backend.ui.PsychUIButton;
 import backend.ui.PsychUIEventHandler;
 import states.editors.content.PsychJsonPrinter; // This one still exists in 1.0.4
+
+// ZIP support
+import haxe.zip.Reader;
+import haxe.zip.Writer;
+import haxe.zip.Entry;
+import haxe.io.Bytes;
+import haxe.io.BytesInput;
+import haxe.io.BytesOutput;
 
 using StringTools;
 
@@ -439,20 +447,6 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 	// ------------------------------------------------------------------------------------
 	// ANIMATION LIST + CONTROLS
 	// ------------------------------------------------------------------------------------
-
-	function updateAnimList() {
-		if (animDropdown != null)
-			remove(animDropdown);
-
-		var names = character.getAnimationList();
-		if (names.length == 0)
-			names.push("idle");
-
-		animDropdown = new PsychUIDropDownMenu(uiBox.x + 10, uiBox.y + 160, 380, names);
-		animDropdown.cameras = [camHUD];
-		animDropdown.eventHandler = this;
-		add(animDropdown);
-	}
 
 	function playAnim(name:String) {
 		if (character == null)

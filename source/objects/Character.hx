@@ -698,4 +698,4 @@ class Character extends FlxSprite
         }
     }
     #end
-
+}

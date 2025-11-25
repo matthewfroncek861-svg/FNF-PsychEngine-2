@@ -12,9 +12,9 @@ import backend.ClientPrefs;
 import backend.animation.PsychAnimationController;
 
 import states.PlayState;
+import states.stages.objects.TankmenBG;
 import backend.Song;
 import backend.Song.SwagSong;
-import objects.TankmenBG;
 
 import haxe.Json;
 import haxe.io.Bytes;

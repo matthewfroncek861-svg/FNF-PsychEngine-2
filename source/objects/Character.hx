@@ -164,8 +164,7 @@ class Character extends FlxSprite {
 		if (!Assets.exists(path))
 		#end
 		{
-			path = Paths.getSharedPath('characters/' + DEFAULT_CHARACTER +
-				'.json'); // If a character couldn't be found, change him to BF just to prevent a crash
+			path = Paths.getSharedPath('characters/' DEFAULT_CHARACTER '.json'); // If a character couldn't be found, change him to BF just to prevent a crash
 			missingCharacter = true;
 			missingText = new FlxText(0, 0, 300, 'ERROR:\n$character.json', 16);
 			missingText.alignment = CENTER;
@@ -228,7 +227,7 @@ class Character extends FlxSprite {
 		//--------------------------------------------------
 		#if flxanimate
 		if (!isZip) {
-			var animJSON = Paths.getPath('images/' + imageFile + '/Animation.json', TEXT);
+			var animJSON = Paths.getPath('images/' imageFile '/Animation.json', TEXT);
 			var foundAnim = #if MODS_ALLOWED FileSystem.exists(animJSON) #else Assets.exists(animJSON) #end;
 
 			if (foundAnim) {
@@ -338,9 +337,9 @@ class Character extends FlxSprite {
 			case "pico-speaker":
 				if (animationNotes.length > 0 && Conductor.songPosition > animationNotes[0][0]) {
 					var nd:Int = (animationNotes[0][1] > 2) ? 3 : 1;
-					nd += FlxG.random.int(0, 1);
+					nd = FlxG.random.int(0, 1);
 
-					playAnim("shoot" + nd, true);
+					playAnim("shoot" nd, true);
 					animationNotes.shift();
 				}
 
@@ -350,7 +349,7 @@ class Character extends FlxSprite {
 
 		// Hold logic
 		if (getAnimationName().startsWith("sing"))
-			holdTimer += elapsed;
+			holdTimer = elapsed;
 		else if (isPlayer)
 			holdTimer = 0;
 
@@ -454,9 +453,9 @@ class Character extends FlxSprite {
 		if (!debugMode && !skipDance && !specialAnim) {
 			if (danceIdle) {
 				danced = !danced;
-				playAnim((danced ? 'danceRight' : 'danceLeft') + idleSuffix);
-			} else if (hasAnimation('idle' + idleSuffix))
-				playAnim('idle' + idleSuffix);
+				playAnim((danced ? 'danceRight' : 'danceLeft') idleSuffix);
+			} else if (hasAnimation('idle' idleSuffix))
+				playAnim('idle' idleSuffix);
 		}
 	}
 
@@ -534,7 +533,7 @@ class Character extends FlxSprite {
 
 	public function recalculateDanceIdle() {
 		var lastDanceIdle:Bool = danceIdle;
-		danceIdle = (hasAnimation('danceLeft' + idleSuffix) && hasAnimation('danceRight' + idleSuffix));
+		danceIdle = (hasAnimation('danceLeft' idleSuffix) && hasAnimation('danceRight' idleSuffix));
 
 		if (settingCharacterUp) {
 			danceEveryNumBeats = (danceIdle ? 1 : 2);
@@ -588,40 +587,74 @@ class Character extends FlxSprite {
 
 		var list = reader.read();
 
-		for (entry in list) {
-		    var fn:String = entry.fileName.toLowerCase();
-		    var bytes:Bytes = entry.data;   // <--- NOW entry EXISTS
-	    	var data = entry.data; // Bytes
-
- 		    switch (fn)
-	        {
-		        case "data.json":
-		            animateData = bytes.toString();
-
-		        case "library.json":
-		            libraryData = bytes.toString();
-
-		        default:
-		            if (fn.endsWith(".xml"))
-                        spriteXML = bytes.toString();
-
-		            if (fn.endsWith(".png"))
-                        spritePNG = bytes;
-	        }
-		}
-
 		var animateData:String = null;
 		var libraryData:String = null;
 		var spritePNG:Bytes = null;
 		var spriteXML:String = null;
 
-		zipLibrary = null;
+		animateData = null;
+		libraryData = null;
+		spritePNG = null;
+		spriteXML = null;
+		zipSymbols = [];
+		zipFrames = new Map();
 		zipData = null;
+		zipLibrary = null;
+
+		for (entry in list) {
+			var fn = entry.fileName.toLowerCase();
+			var data = entry.data;
+
+			// --- Animate JSON ---
+			if (fn == "data.json")
+				animateData = data.toString();
+
+			// --- Library JSON ---
+			else if (fn == "library.json")
+				libraryData = data.toString();
+
+			// --- Animate symbols ---
+			else if (StringTools.startsWith(fn, "symbols/") && fn.endsWith(".png")) {
+				var symbol = fn.substring("symbols/".length, fn.length - 4);
+				var bmp = BitmapData.fromBytes(data);
+
+				if (!zipSymbols.contains(symbol))
+					zipSymbols.push(symbol);
+				if (!zipFrames.exists(symbol))
+					zipFrames.set(symbol, []);
+
+				zipFrames.get(symbol).push(bmp);
+			}
+
+			// --- Spritemap fallback ---
+			else if (fn == "spritemap.png")
+				spritePNG = data;
+			else if (fn == "spritemap.xml" || fn == "spritesheet.xml")
+				spriteXML = data.toString();
+		}
+
+		// --- Format selection ---
+		if (animateData != null) {
+			zipIsAnimate = true;
+			zipData = Json.parse(animateData);
+			if (libraryData != null)
+				zipLibrary = Json.parse(libraryData);
+			loadAnimateZIP();
+			return;
+		}
+
+		if (spritePNG != null && spriteXML != null) {
+			zipIsSpritesheet = true;
+			loadSpritesheetZIP(spritePNG, spriteXML);
+			return;
+		}
+
+		isZip = false;
 
 		for (entry in list) {
 			var fn = entry.fileName.toLowerCase();
 			var bytes = entry.data;
-	    	var data = entry.data; // Bytes
+			var data = entry.data; // Bytes
 
 			if (fn == "data.json")
 				animateData = bytes.toString();
@@ -673,18 +706,17 @@ class Character extends FlxSprite {
 		frames = null;
 		animateMap = new Map();
 
-		if (zipData.animations != null) {
-			for (field in Reflect.fields(zipData.animations)) {
+		if (zipData != null && zipData.animations != null) {
+			for (animName in Reflect.fields(zipData.animations)) {
+				var obj = Reflect.field(zipData.animations, animName);
 				var arr:Array<Int> = [];
-				var obj = Reflect.field(zipData.animations, field);
 
 				if (obj.frames != null) {
-					var frames:Array<Dynamic> = cast obj.frames;
-					for (f in frames)
+					for (f in cast(obj.frames, Array<Dynamic>))
 						arr.push(f);
 				}
 
-				animateMap.set(field, arr);
+				animateMap.set(animName, arr);
 			}
 		}
 	}
@@ -697,16 +729,16 @@ class Character extends FlxSprite {
 	// ====================================================
 	// ANIMATE ZIP DRAW HELPERS
 	// ====================================================
-
 	private function getSymbolMatrix(symbol:String, frame:Int):Matrix {
 		if (zipLibrary == null)
+			return null;
+		if (!Reflect.hasField(zipLibrary, "symbols"))
 			return null;
 		if (!Reflect.hasField(zipLibrary.symbols, symbol))
 			return null;
 
 		var sym = Reflect.field(zipLibrary.symbols, symbol);
-
-		if (!Reflect.hasField(sym, "timeline"))
+		if (sym == null || sym.timeline == null)
 			return null;
 
 		var layers = sym.timeline.layers;
@@ -715,6 +747,8 @@ class Character extends FlxSprite {
 
 		var layer = layers[0];
 		var framesArr = layer.frames;
+		if (framesArr == null || framesArr.length == 0)
+			return null;
 
 		if (frame < 0 || frame >= framesArr.length)
 			frame = framesArr.length - 1;
@@ -727,15 +761,7 @@ class Character extends FlxSprite {
 		if (elem == null || elem.matrix == null)
 			return null;
 
-		var m = new Matrix();
-		m.a = elem.matrix[0];
-		m.b = elem.matrix[1];
-		m.c = elem.matrix[2];
-		m.d = elem.matrix[3];
-		m.tx = elem.matrix[4];
-		m.ty = elem.matrix[5];
-
-		return m;
+		return new Matrix(elem.matrix[0], elem.matrix[1], elem.matrix[2], elem.matrix[3], elem.matrix[4], elem.matrix[5]);
 	}
 
 	private function getFrame():Int {
@@ -786,77 +812,77 @@ class Character extends FlxSprite {
 		}
 		#end
 
-		if (!isZip || zipIsSpritesheet) {
-			super.draw();
-
-			if (missingCharacter && visible) {
-				alpha = lastAlpha;
-				color = lastColor;
-				missingText.x = getMidpoint().x - 150;
-				missingText.y = getMidpoint().y - 10;
-				missingText.draw();
-			}
-
-			return;
-		}
-
-		// ZIP ANIMATE MODE
-		var anim = getAnimationName();
-		var frame = getFrame();
-		var bmp = getZipBitmap(anim, frame);
-
-		if (bmp == null) {
+		if (!isZip) {
 			super.draw();
 			return;
 		}
 
-		var mat = getSymbolMatrix(anim, frame);
-		var m = new Matrix();
-
-		if (mat != null)
-			m.concat(mat);
-
-		m.scale(scale.x, scale.y);
-		m.translate(x - offset.x, y - offset.y);
-
-		FlxG.camera.buffer.draw(bmp, m, colorTransform);
-
-		alpha = lastAlpha;
-		color = lastColor;
-	}
-
-	// ====================================================
-	// COPY ATLAS VALUES
-	// ====================================================
-
-	public function copyAtlasValues() {
-		#if flxanimate
-		@:privateAccess
-		{
-			atlas.cameras = cameras;
-			atlas.scrollFactor = scrollFactor;
-			atlas.scale = scale;
-			atlas.offset = offset;
-			atlas.origin = origin;
-			atlas.x = x;
-			atlas.y = y;
-			atlas.angle = angle;
-			atlas.alpha = alpha;
-			atlas.visible = visible;
-			atlas.flipX = flipX;
-			atlas.flipY = flipY;
-			atlas.shader = shader;
-			atlas.antialiasing = antialiasing;
-			atlas.colorTransform = colorTransform;
-			atlas.color = color;
+		// Spritesheet ZIP uses normal draw
+		if (zipIsSpritesheet) {
+			super.draw();
+			return;
 		}
-		#end
+
+		if (missingCharacter && visible) {
+			alpha = lastAlpha;
+			color = lastColor;
+			missingText.x = getMidpoint().x - 150;
+			missingText.y = getMidpoint().y - 10;
+			missingText.draw();
+		}
+
+		return;
 	}
 
+	// ZIP Animate drawing
+	var anim = getAnimationName();
+	var frame = getFrame();
+	var bmp = getZipBitmap(anim, frame);
+
+	if (bmp == null) {
+		super.draw();
+		return;
+	}
+	var mat = getSymbolMatrix(anim, frame);
+	if (mat == null)
+		mat = new Matrix();
+	mat.scale(scale.x, scale.y);
+	mat.translate(x - offset.x, y - offset.y);
+	FlxG.camera.buffer.draw(bmp, mat, colorTransform);
+}
+
+// ====================================================
+// COPY ATLAS VALUES
+// ====================================================
+
+public function copyAtlasValues() {
 	#if flxanimate
-	override public function destroy() {
-		atlas = FlxDestroyUtil.destroy(atlas);
-		super.destroy();
+	@:privateAccess
+	{
+		atlas.cameras = cameras;
+		atlas.scrollFactor = scrollFactor;
+		atlas.scale = scale;
+		atlas.offset = offset;
+		atlas.origin = origin;
+		atlas.x = x;
+		atlas.y = y;
+		atlas.angle = angle;
+		atlas.alpha = alpha;
+		atlas.visible = visible;
+		atlas.flipX = flipX;
+		atlas.flipY = flipY;
+		atlas.shader = shader;
+		atlas.antialiasing = antialiasing;
+		atlas.colorTransform = colorTransform;
+		atlas.color = color;
 	}
 	#end
+}
+
+#if flxanimate
+override public function destroy() {
+	atlas = FlxDestroyUtil.destroy(atlas);
+	super.destroy();
+}
+#end
 }

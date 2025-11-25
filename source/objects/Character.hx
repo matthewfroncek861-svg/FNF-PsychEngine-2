@@ -32,7 +32,7 @@ import openfl.geom.Matrix;
 import openfl.geom.ColorTransform;
 
 #if flxanimate
-import flxanimate.FlxAnimate;
+import flxanimate._PsychFlxAnimate.FlxAnimate;
 #end
 
 typedef CharacterFile = {
@@ -120,8 +120,8 @@ class Character extends FlxSprite
 	private var _zipFrame:Int = 0;
 
 	private var _lastPlayedAnimation:String = "";
-
-	public var isAnimateAtlas(default, null):Bool = false;
+	
+	public var isAnimateAtlas:Bool = false;
 
 	#if flxanimate
 	public var atlas:FlxAnimate;
@@ -478,7 +478,7 @@ class Character extends FlxSprite
 		#if flxanimate
 		if (isAnimateAtlas)
 		{
-			if (v) atlas.pauseAnimation(); else atlas.resumeAnimation();
+			if (v) atlas.updateAnimation = !v;
 			return v;
 		}
 		#end
@@ -579,6 +579,39 @@ class Character extends FlxSprite
 		return 0;
 	}
 
+	public var danceEveryNumBeats:Int = 2;
+	private var settingCharacterUp:Bool = true;
+	public function recalculateDanceIdle() {
+		var lastDanceIdle:Bool = danceIdle;
+		danceIdle = (hasAnimation('danceLeft' + idleSuffix) && hasAnimation('danceRight' + idleSuffix));
+
+		if(settingCharacterUp)
+		{
+			danceEveryNumBeats = (danceIdle ? 1 : 2);
+		}
+		else if(lastDanceIdle != danceIdle)
+		{
+			var calc:Float = danceEveryNumBeats;
+			if(danceIdle)
+				calc /= 2;
+			else
+				calc *= 2;
+
+			danceEveryNumBeats = Math.round(Math.max(calc, 1));
+		}
+		settingCharacterUp = false;
+	}
+
+	public function addOffset(name:String, x:Float = 0, y:Float = 0)
+	{
+		animOffsets[name] = [x, y];
+	}
+
+	public function quickAnimAdd(name:String, anim:String)
+	{
+		animation.addByPrefix(name, anim, 24, false);
+	}
+
 	//====================================================
 	// MultiAtlas Loader
 	//====================================================
@@ -612,7 +645,15 @@ class Character extends FlxSprite
 	{
 		var bytes:Bytes = #if MODS_ALLOWED File.getBytes(path) #else Assets.getBytes(path) #end;
 		var reader = new Reader(new BytesInput(bytes));
-		var entries:Array<Entry> = reader.read();
+var list = reader.read(); // returns List<Entry>
+
+for (en in list) {
+    var fn = en.fileName;
+
+    var input = en.getData();     // FIXED
+    var bytes = input.toBytes();  // FIXED
+}
+
 
 		var animateData:String = null;
 		var libraryData:String = null;
@@ -622,12 +663,12 @@ class Character extends FlxSprite
 		zipLibrary = null;
 		zipData = null;
 
-		for (en in entries)
+		for (en in list)
 		{
 			var fn = en.fileName;
 
-			if (fn == "data.json") animateData = en.getContent().toString();
-			if (fn == "library.json") libraryData = en.getContent().toString();
+			if (fn == "data.json") animateData = en.getData().toString();
+			if (fn == "library.json") libraryData = en.getData().toString();
 
 			if (StringTools.startsWith(fn, "symbols/") && StringTools.endsWith(fn, ".png"))
 			{
@@ -645,10 +686,10 @@ class Character extends FlxSprite
 			}
 
 			if (fn == "spritemap.png")
-				spritePNG = en.getContent();
+				spritePNG = en.getData().toBytes();
 
 			if (fn == "spritemap.xml" || fn == "spritesheet.xml")
-				spriteXML = en.getContent().toString();
+				spriteXML = en.getData().toString();
 		}
 
 		if (animateData != null)

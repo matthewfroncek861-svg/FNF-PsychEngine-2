@@ -437,7 +437,7 @@ class Character extends FlxSprite {
 		#if flxanimate
 		if (isAnimateAtlas) {
 			if (v)
-				atlas.animation.playing = !v;
+				atlas.animation.paused = v; // v = true means pause
 			return v;
 		}
 		#end
@@ -584,7 +584,7 @@ class Character extends FlxSprite {
 	public function loadZIP(path:String):Void {
 		var bytes:Bytes = #if MODS_ALLOWED File.getBytes(path) #else Assets.getBytes(path) #end;
 		var reader = new Reader(new BytesInput(bytes));
-		var data = en.data; // Bytes
+		var data = entry.data; // Bytes
 
 		var list = reader.read(); // List<Entry>
 
@@ -616,11 +616,11 @@ class Character extends FlxSprite {
 
 		zipLibrary = null;
 		zipData = null;
-
-		for (en in list) {
-			var fn = en.fileName.toLowerCase();
-			var bytes = en.data;
-
+		
+		for (entry in list) {
+            var fn = entry.fileName.toLowerCase();
+            var bytes = entry.data;
+	
 			if (fn == "data.json")
 				animateData = bytes.toString();
 			if (fn == "library.json")
@@ -628,7 +628,7 @@ class Character extends FlxSprite {
 
 			if (StringTools.startsWith(fn, "symbols/") && StringTools.endsWith(fn, ".png")) {
 				var name = fn.substring(8, fn.length - 4);
-				var bytes = en.getContent();
+				var bytes = entry.data;
 				var bmp = BitmapData.fromBytes(bytes);
 
 				if (!zipSymbols.contains(name))
